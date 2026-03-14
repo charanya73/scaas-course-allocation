@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}My Allocation – SCAAS{% endblock %}
+{% block content %}
+<div class="container page-wrap" style="max-width:800px;">
+  <div style="margin-bottom:2rem;">
+    <a href="/dashboard" style="color:var(--text2);text-decoration:none;font-size:0.85rem;font-weight:500;">← Back to Dashboard</a>
+    <h1 style="font-size:1.5rem;font-weight:800;margin-top:6px;">My Allocation Result</h1>
+  </div>
+
+  {% if allocation and allocation['allocation_status'] == 'Allocated' %}
+  <div class="card" style="margin-bottom:1.5rem;overflow:hidden;">
+    <div style="background:linear-gradient(135deg,var(--success),#34d399);padding:2rem;text-align:center;color:#fff;">
+      <div style="font-size:2.5rem;margin-bottom:0.75rem;">🎉</div>
+      <div style="font-size:0.85rem;font-weight:600;opacity:0.85;margin-bottom:0.5rem;">Course Allocated Successfully</div>
+      <div style="font-size:1.75rem;font-weight:800;margin-bottom:4px;">{{ allocation['course_name'] }}</div>
+      <div style="font-size:0.9rem;opacity:0.85;">{{ allocation['course_code'] }}</div>
+    </div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1rem;text-align:center;margin-bottom:1.5rem;">
+        {% for label, value in [('Department', allocation['department']),('Day', allocation['day']),('Time Slot', allocation['time_slot'])] %}
+        <div style="background:var(--bg2);border-radius:var(--radius-sm);padding:12px;">
+          <div style="font-size:0.72rem;color:var(--text2);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;">{{ label }}</div>
+          <div style="font-size:0.95rem;font-weight:700;">{{ value }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {% if allocation['description'] %}
+      <div class="alert alert-info" style="font-size:0.85rem;">
+        📖 <strong>Course Description:</strong> {{ allocation['description'] }}
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {% elif allocation and allocation['allocation_status'] == 'Not Allocated' %}
+  <div class="card" style="margin-bottom:1.5rem;overflow:hidden;">
+    <div style="background:linear-gradient(135deg,var(--danger),#f87171);padding:2rem;text-align:center;color:#fff;">
+      <div style="font-size:2.5rem;margin-bottom:0.75rem;">😔</div>
+      <div style="font-size:1.25rem;font-weight:800;margin-bottom:8px;">Not Allocated</div>
+      <div style="font-size:0.875rem;opacity:0.85;">Unfortunately, you could not be allocated a course in this round.</div>
+    </div>
+    <div class="card-body">
+      <div class="alert alert-warning">
+        <strong>Reason:</strong> {{ allocation['notes'] or 'No eligible courses were available.' }}
+      </div>
+      <p style="font-size:0.875rem;color:var(--text2);margin-top:0.75rem;">Please contact your academic advisor or the admin to resolve this. You may be manually assigned a course.</p>
+    </div>
+  </div>
+
+  {% else %}
+  <div class="card" style="margin-bottom:1.5rem;">
+    <div class="card-body" style="text-align:center;padding:3rem;">
+      <div style="font-size:3rem;margin-bottom:1rem;">⏳</div>
+      <h2 style="font-weight:700;margin-bottom:0.5rem;">Allocation Not Run Yet</h2>
+      <p style="color:var(--text2);font-size:0.875rem;margin-bottom:1.5rem;">The course allocation process hasn't been completed yet. Make sure you have submitted your preferences.</p>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+        <a href="/preferences" class="btn btn-primary">Submit/Edit Preferences</a>
+        <a href="/dashboard" class="btn btn-secondary">Go to Dashboard</a>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Preferences Summary -->
+  {% if preferences %}
+  <div class="card">
+    <div class="card-header"><h3>Preferences You Submitted</h3></div>
+    <div class="card-body" style="padding:0;">
+      {% for pref in preferences %}
+      <div style="display:flex;align-items:center;gap:12px;padding:12px 1.5rem;{% if not loop.last %}border-bottom:1px solid var(--border);{% endif %}{% if allocation and allocation['course_code']==pref['course_code'] %}background:#f0fdf4;{% endif %}">
+        <div style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.78rem;font-weight:800;flex-shrink:0;
+          {% if loop.index==1 %}background:#fef3c7;color:var(--warning);
+          {% elif loop.index==2 %}background:#eff6ff;color:var(--primary);
+          {% else %}background:var(--bg2);color:var(--text2);{% endif %}">{{ loop.index }}</div>
+        <div style="flex:1;">
+          <div style="font-size:0.875rem;font-weight:600;">{{ pref['course_name'] }}</div>
+          <div style="font-size:0.75rem;color:var(--text2);">{{ pref['course_code'] }}</div>
+        </div>
+        {% if allocation and allocation['allocation_status']=='Allocated' and allocation['course_code']==pref['course_code'] %}
+        <span class="badge badge-green">✓ Allocated</span>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

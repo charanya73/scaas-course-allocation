@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Admin Login – SCAAS{% endblock %}
+{% block content %}
+<div style="min-height:calc(100vh - 60px);background:var(--bg2);display:flex;align-items:center;justify-content:center;padding:2rem;">
+  <div style="width:100%;max-width:420px;">
+    <div style="text-align:center;margin-bottom:1.5rem;">
+      <div style="width:52px;height:52px;background:var(--warning);border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 0.75rem;font-size:1.4rem;">⚙️</div>
+      <h1 style="font-size:1.5rem;font-weight:800;">Admin Login</h1>
+      <p style="color:var(--text2);font-size:0.875rem;margin-top:4px;">Authorized administrators only</p>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <div class="alert alert-warning" style="margin-bottom:1.25rem;font-size:0.8rem;">
+          ⚠️ This portal is restricted to authorized university administrators.
+        </div>
+        <div class="form-group">
+          <label class="form-label">Admin Email</label>
+          <input type="email" id="email" class="form-input" placeholder="admin@university.edu">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" id="password" class="form-input" placeholder="Admin password" onkeydown="if(event.key==='Enter')handleLogin()">
+        </div>
+        <button class="btn btn-warning btn-lg" style="width:100%;justify-content:center;" onclick="handleLogin()" id="login-btn">Admin Login</button>
+        <div class="divider"></div>
+        <p style="text-align:center;font-size:0.8rem;color:var(--text2);">
+          New admin? <a href="/admin/signup" style="color:var(--primary);font-weight:600;text-decoration:none;">Register here</a>
+          &nbsp;|&nbsp; <a href="/login" style="color:var(--text3);text-decoration:none;">Student Login</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+async function handleLogin() {
+  const btn=document.getElementById('login-btn');
+  btn.textContent='Logging in...';btn.disabled=true;
+  try {
+    const r=await fetch('/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('email').value,password:document.getElementById('password').value})});
+    const d=await r.json();
+    if(d.success){showToast('Welcome back!','success');setTimeout(()=>window.location.href=d.redirect,600);}
+    else{showToast(d.message,'error');btn.textContent='Admin Login';btn.disabled=false;}
+  } catch(e){showToast('Network error.','error');btn.textContent='Admin Login';btn.disabled=false;}
+}
+</script>
+{% endblock %}

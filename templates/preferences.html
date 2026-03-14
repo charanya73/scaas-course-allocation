@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% block title %}Course Preferences – SCAAS{% endblock %}
+{% block content %}
+<div class="container page-wrap">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
+    <div>
+      <a href="/dashboard" style="color:var(--text2);text-decoration:none;font-size:0.8rem;font-weight:500;">← Back to Dashboard</a>
+      <h1 style="font-size:1.5rem;font-weight:800;margin-top:4px;">Select Your Course Preferences</h1>
+      <p style="color:var(--text2);font-size:0.85rem;margin-top:2px;">Rank up to {{ settings['max_preferences'] }} courses by preference priority</p>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-secondary" onclick="clearAll()">Clear All</button>
+      <button class="btn btn-primary btn-lg" onclick="submitPreferences()" id="submit-btn">Submit Preferences</button>
+    </div>
+  </div>
+
+  {% if not settings['allow_modifications'] %}
+  <div class="alert alert-danger" style="margin-bottom:1.5rem;">
+    🔒 Preference submission is currently closed. The allocation has already been run.
+  </div>
+  {% endif %}
+
+  <!-- SELECTION BAR -->
+  <div class="card" style="margin-bottom:1.5rem;">
+    <div class="card-body" style="padding:1rem 1.5rem;">
+      <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+        <span style="font-size:0.82rem;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:0.04em;">Selected:</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;flex:1;" id="selection-slots">
+          {% for i in range(1, settings['max_preferences']+1) %}
+          <div id="slot-{{ i }}" style="display:flex;align-items:center;gap:6px;background:var(--bg2);border:1.5px dashed var(--border2);border-radius:var(--radius-sm);padding:5px 12px;min-width:150px;max-width:200px;">
+            <span style="font-size:0.72rem;font-weight:800;color:{% if i==1 %}var(--warning){% elif i==2 %}var(--primary){% elif i==3 %}var(--success){% else %}var(--text3){% endif %};">P{{ i }}</span>
+            <span class="slot-name" style="font-size:0.78rem;color:var(--text3);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">Empty</span>
+            <button class="slot-clear" onclick="clearSlot({{ i }})" style="display:none;background:none;border:none;color:var(--danger);cursor:pointer;font-size:0.85rem;padding:0;flex-shrink:0;">✕</button>
+          </div>
+          {% endfor %}
+        </div>
+        <span id="sel-count" style="font-size:0.8rem;color:var(--text2);font-weight:600;white-space:nowrap;">0/{{ settings['max_preferences'] }}</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- FILTERS & SEARCH -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.25rem;align-items:center;">
+    <input type="text" id="search-courses" class="form-input" style="max-width:260px;" placeholder="🔍 Search courses..." oninput="filterCourses()">
+    <select id="dept-filter" class="form-select" style="max-width:200px;" onchange="filterCourses()">
+      <option value="">All Departments</option>
+      {% for dept in courses|map(attribute='department')|unique|sort %}
+      <option>{{ dept }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <!-- COURSE GRID -->
+  <div class="grid grid-3" id="course-grid">
+    {% for course in courses %}
+    <div class="card course-item" data-id="{{ course['course_id'] }}" data-name="{{ course['course_name'] }}"
+         data-dept="{{ course['department'] }}" data-prereq="{{ course['prerequisite'] }}"
+         data-day="{{ course['day'] }}" data-time="{{ course['time_slot'] }}"
+         style="cursor:pointer;transition:all 0.15s;overflow:hidden;position:relative;"
+         onclick="toggleCourse({{ course['course_id'] }}, '{{ course['course_name']|replace("'","") }}', '{{ course['prerequisite'] }}', '{{ course['day'] }}', '{{ course['time_slot'] }}')">
+
+      <!-- Selection indicator -->
+      <div id="sel-{{ course['course_id'] }}" style="position:absolute;top:10px;right:10px;width:22px;height:22px;border:2px solid var(--border2);border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:800;transition:all 0.15s;"></div>
+
+      <div style="background:var(--primary);height:3px;"></div>
+      <div class="card-body">
+        <div style="padding-right:2rem;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--primary);font-weight:500;margin-bottom:2px;">{{ course['course_code'] }}</div>
+          <h3 style="font-size:0.9rem;font-weight:700;margin-bottom:5px;line-height:1.3;">{{ course['course_name'] }}</h3>
+          <span class="badge badge-blue" style="font-size:0.7rem;">{{ course['department'] }}</span>
+        </div>
+        <p style="font-size:0.78rem;color:var(--text2);margin:10px 0;min-height:32px;">{{ course['description'] }}</p>
+        <div style="height:1px;background:var(--border);margin:0.75rem 0;"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:0.78rem;">
+          <div>
+            <span style="color:var(--text3);">Seats: </span>
+            <span style="font-weight:700;color:{% if course['seats_remaining'] < 5 %}var(--danger){% elif course['seats_remaining'] < 15 %}var(--warning){% else %}var(--success){% endif %};">{{ course['seats_remaining'] }}/{{ course['seat_capacity'] }}</span>
+          </div>
+          <div><span style="color:var(--text3);">Day: </span><span style="font-weight:600;">{{ course['day'][:3] }}</span></div>
+          <div style="grid-column:span 2;"><span style="color:var(--text3);">Time: </span><span style="font-family:'JetBrains Mono',monospace;font-weight:600;">{{ course['time_slot'] }}</span></div>
+          <div style="grid-column:span 2;display:flex;align-items:center;gap:5px;">
+            <span style="color:var(--text3);">Pre-req:</span>
+            <span class="badge {% if course['prerequisite']=='None' %}badge-green{% else %}badge-amber{% endif %}" style="font-size:0.68rem;">{{ course['prerequisite'] }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+const selected = {}; // rank → {course_id, name, day, time}
+const MAX = {{ settings['max_preferences'] }};
+const completed = {{ ('["' + student['completed_courses'].replace(', ','" , "').replace(',','","') + '"]') if student['completed_courses'] else '[]' }};
+const allowMod = {{ 'true' if settings['allow_modifications'] else 'false' }};
+
+// Pre-load existing preferences
+{% for pref in existing_prefs %}
+selected[{{ pref['priority_rank'] }}] = {course_id: {{ pref['course_id'] }}, name: '...', day: '', time: ''};
+{% endfor %}
+
+// Initialize UI after page load
+window.addEventListener('DOMContentLoaded', ()=>{
+  // Restore existing selections visually
+  {% for pref in existing_prefs %}
+  fetch('/api/course/{{ pref["course_id"] }}').then(r=>r.json()).then(c=>{
+    if(c.course_id) {
+      selected[{{ pref['priority_rank'] }}] = {course_id:c.course_id, name:c.course_name, day:c.day, time:c.time_slot};
+      updateUI();
+    }
+  });
+  {% endfor %}
+});
+
+function toggleCourse(id, name, prereq, day, time) {
+  if(!allowMod) { showToast('Preference submission is closed.','error'); return; }
+
+  // If already selected → remove
+  for(let rank in selected) {
+    if(selected[rank].course_id == id) { clearSlot(parseInt(rank)); return; }
+  }
+
+  // Prerequisite check
+  const prereqTrimmed = prereq.trim();
+  const completedTrimmed = completed.map(c=>c.trim());
+  if(prereqTrimmed !== 'None' && !completedTrimmed.includes(prereqTrimmed)) {
+    showToast(`❌ Prerequisite not completed: "${prereqTrimmed}" is required for ${name}`, 'error', 5000); return;
+  }
+
+  // Conflict check
+  for(let rank in selected) {
+    if(selected[rank].day === day && selected[rank].time === time) {
+      showToast(`⚠️ Schedule conflict: ${selected[rank].name} is also on ${day} at ${time}`, 'error', 5000); return;
+    }
+  }
+
+  // Max check
+  if(Object.keys(selected).length >= MAX) {
+    showToast(`You can only select up to ${MAX} preferences. Remove one first.`,'warning'); return;
+  }
+
+  const nextRank = Array.from({length:MAX},(_,i)=>i+1).find(r=>!selected[r]);
+  selected[nextRank] = {course_id:id, name, day, time};
+  updateUI();
+  showToast(`Added as Preference ${nextRank}: ${name}`,'success',2500);
+}
+
+function clearSlot(rank) {
+  if(!selected[rank]) return;
+  delete selected[rank];
+  updateUI();
+}
+
+function clearAll() {
+  Object.keys(selected).forEach(k=>delete selected[k]);
+  updateUI();
+  showToast('All selections cleared','info',2000);
+}
+
+function updateUI() {
+  const count = Object.keys(selected).length;
+  document.getElementById('sel-count').textContent = `${count}/${MAX}`;
+
+  // Update slots
+  for(let r=1;r<=MAX;r++){
+    const slot=document.getElementById(`slot-${r}`);
+    const nameEl=slot.querySelector('.slot-name');
+    const clearBtn=slot.querySelector('.slot-clear');
+    if(selected[r]){
+      nameEl.textContent=selected[r].name;
+      nameEl.style.color='var(--text)';
+      nameEl.style.fontWeight='600';
+      clearBtn.style.display='block';
+      slot.style.borderStyle='solid';
+      slot.style.background=r===1?'#fffbeb':r===2?'#eff6ff':r===3?'#f0fdf4':'var(--bg2)';
+      slot.style.borderColor=r===1?'var(--warning)':r===2?'var(--primary)':r===3?'var(--success)':'var(--border2)';
+    } else {
+      nameEl.textContent='Empty';
+      nameEl.style.color='var(--text3)';
+      nameEl.style.fontWeight='400';
+      clearBtn.style.display='none';
+      slot.style.borderStyle='dashed';
+      slot.style.background='var(--bg2)';
+      slot.style.borderColor='var(--border2)';
+    }
+  }
+
+  // Update cards
+  document.querySelectorAll('.course-item').forEach(card=>{
+    const id=parseInt(card.dataset.id);
+    const selEl=document.getElementById(`sel-${id}`);
+    const rank=Object.entries(selected).find(([r,v])=>v.course_id===id);
+    if(rank){
+      const r=parseInt(rank[0]);
+      selEl.textContent=r;
+      selEl.style.background=r===1?'var(--warning)':r===2?'var(--primary)':r===3?'var(--success)':'var(--text2)';
+      selEl.style.color='#fff';
+      selEl.style.border='none';
+      card.style.boxShadow='0 0 0 2px '+(r===1?'var(--warning)':r===2?'var(--primary)':r===3?'var(--success)':'var(--border2)');
+      card.style.background=r===1?'#fffbeb':r===2?'#eff6ff':r===3?'#f0fdf4':'var(--surface)';
+    } else {
+      selEl.textContent='';
+      selEl.style.background='var(--surface)';
+      selEl.style.border='2px solid var(--border2)';
+      card.style.boxShadow='';
+      card.style.background='var(--surface)';
+    }
+  });
+}
+
+function filterCourses() {
+  const q=document.getElementById('search-courses').value.toLowerCase();
+  const dept=document.getElementById('dept-filter').value;
+  document.querySelectorAll('.course-item').forEach(c=>{
+    const name=c.dataset.name.toLowerCase();
+    const code=c.querySelector('[style*="JetBrains"]')?.textContent.toLowerCase()||'';
+    const matchQ=!q||name.includes(q)||code.includes(q);
+    const matchD=!dept||c.dataset.dept===dept;
+    c.style.display=(matchQ&&matchD)?'block':'none';
+  });
+}
+
+async function submitPreferences() {
+  if(!allowMod){showToast('Submission is closed.','error');return;}
+  if(Object.keys(selected).length===0){showToast('Please select at least one course.','error');return;}
+  const prefs=Object.entries(selected).map(([rank,data])=>({course_id:data.course_id,rank:parseInt(rank)}));
+  const btn=document.getElementById('submit-btn');
+  btn.textContent='Submitting...';btn.disabled=true;
+  try {
+    const r=await fetch('/preferences',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({preferences:prefs})});
+    const d=await r.json();
+    btn.textContent='Submit Preferences';btn.disabled=false;
+    if(d.success){showToast('✅ '+d.message,'success',4000);setTimeout(()=>window.location.href='/dashboard',2000);}
+    else showToast(d.message,'error',6000);
+  } catch(e){showToast('Network error.','error');btn.textContent='Submit Preferences';btn.disabled=false;}
+}
+</script>
+{% endblock %}

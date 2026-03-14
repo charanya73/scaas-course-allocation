@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Merit Certificate – SCAAS{% endblock %}
+{% block content %}
+<div class="container page-wrap" style="max-width:750px;">
+  <div style="margin-bottom:2rem;">
+    <a href="/dashboard" style="color:var(--text2);text-decoration:none;font-size:0.85rem;font-weight:500;">← Back to Dashboard</a>
+    <h1 style="font-size:1.5rem;font-weight:800;margin-top:6px;">Merit Certificate</h1>
+    <p style="color:var(--text2);font-size:0.875rem;">Download your official course enrollment certificate</p>
+  </div>
+
+  {% if not allocation %}
+  <div class="card">
+    <div class="card-body" style="text-align:center;padding:3rem;">
+      <div style="font-size:3rem;margin-bottom:1rem;">🏅</div>
+      <h2 style="font-weight:700;margin-bottom:0.5rem;">No Course Allocated</h2>
+      <p style="color:var(--text2);margin-bottom:1.5rem;">You need to be allocated a course to receive a certificate.</p>
+      <a href="/dashboard" class="btn btn-primary">Go to Dashboard</a>
+    </div>
+  </div>
+
+  {% else %}
+  <!-- Certificate Preview -->
+  <div class="card" style="margin-bottom:1.5rem;overflow:hidden;">
+    <!-- Certificate Preview Design -->
+    <div style="background:linear-gradient(135deg,#1e3a8a 0%,#1e40af 60%,#0891b2 100%);padding:2.5rem;text-align:center;color:#fff;position:relative;">
+      <div style="position:absolute;top:12px;left:12px;right:12px;bottom:12px;border:2px solid rgba(255,255,255,0.25);border-radius:8px;pointer-events:none;"></div>
+      <div style="font-size:0.75rem;letter-spacing:0.15em;opacity:0.7;margin-bottom:0.5rem;text-transform:uppercase;">Certificate of Course Enrollment</div>
+      <div style="font-size:0.85rem;opacity:0.6;margin-bottom:1.5rem;">Student Course Allocation Automation System</div>
+      <div style="font-size:0.9rem;opacity:0.8;margin-bottom:0.5rem;">This is to certify that</div>
+      <div style="font-size:1.75rem;font-weight:800;margin-bottom:4px;">{{ student['name'] }}</div>
+      <div style="font-size:0.85rem;opacity:0.7;margin-bottom:1.5rem;">{{ student['student_id'] }} · {{ student['department'] }}</div>
+      <div style="font-size:0.9rem;opacity:0.8;margin-bottom:0.5rem;">has been successfully enrolled in</div>
+      <div style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:8px;display:inline-block;padding:10px 28px;margin:8px 0;">
+        <div style="font-size:1.2rem;font-weight:800;">{{ allocation['course_name'] }}</div>
+        <div style="font-size:0.8rem;opacity:0.8;">{{ allocation['course_code'] }} · {{ allocation['department'] }}</div>
+      </div>
+      <div style="display:flex;justify-content:center;gap:2rem;margin-top:1.25rem;flex-wrap:wrap;">
+        <div style="text-align:center;">
+          <div style="font-size:0.68rem;opacity:0.6;text-transform:uppercase;letter-spacing:0.06em;">Venue</div>
+          <div style="font-size:0.9rem;font-weight:700;">{{ allocation['venue'] }}</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:0.68rem;opacity:0.6;text-transform:uppercase;letter-spacing:0.06em;">Schedule</div>
+          <div style="font-size:0.9rem;font-weight:700;">{{ allocation['day'] }} · {{ allocation['time_slot'] }}</div>
+        </div>
+      </div>
+      <div style="margin-top:1.5rem;font-size:0.7rem;opacity:0.5;">🏅 OFFICIALLY CERTIFIED</div>
+    </div>
+
+    <div class="card-body">
+      {% if cert %}
+      <div class="alert alert-success" style="margin-bottom:1.25rem;">
+        ✅ Certificate generated on {{ cert['issued_at'][:10] }} · ID: <span style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;">{{ cert['certificate_id'] }}</span>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <a href="/certificate/download/{{ cert['certificate_id'] }}" class="btn btn-success btn-lg" style="flex:1;justify-content:center;">
+          ⬇️ Download PDF Certificate
+        </a>
+        <button onclick="generateCert()" class="btn btn-secondary" style="flex:0;">Re-generate</button>
+      </div>
+      {% else %}
+      <div class="alert alert-info" style="margin-bottom:1.25rem;">
+        ℹ️ Your certificate is ready to be generated. Click below to create your official PDF certificate.
+      </div>
+      <button onclick="generateCert()" class="btn btn-primary btn-lg" style="width:100%;justify-content:center;" id="gen-btn">
+        🏅 Generate My Certificate
+      </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Certificate Details -->
+  <div class="card">
+    <div class="card-header"><h3>Certificate Details</h3></div>
+    <div class="card-body" style="padding:0;">
+      {% for label, value in [('Student Name', student['name']),('Student ID', student['student_id']),('Department', student['department']),('Course', allocation['course_name']),('Course Code', allocation['course_code']),('Venue', allocation['venue']),('Schedule', allocation['day'] ~ ' · ' ~ allocation['time_slot'])] %}
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 1.5rem;{% if not loop.last %}border-bottom:1px solid var(--border);{% endif %}">
+        <span style="font-size:0.82rem;color:var(--text2);font-weight:500;">{{ label }}</span>
+        <span style="font-size:0.875rem;font-weight:600;">{{ value }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<div id="download-area" style="display:none;"></div>
+
+<script>
+async function generateCert() {
+  const btn = document.getElementById('gen-btn');
+  if(btn) { btn.textContent = '⏳ Generating...'; btn.disabled = true; }
+  try {
+    const r = await fetch('/certificate/generate', {method:'POST', headers:{'Content-Type':'application/json'}, body:'{}'});
+    const d = await r.json();
+    if(d.success) {
+      showToast(d.message, 'success');
+      setTimeout(()=>{
+        window.location.href = `/certificate/download/${d.cert_id}`;
+        setTimeout(()=>location.reload(), 2000);
+      }, 1000);
+    } else {
+      showToast(d.message, 'error');
+      if(btn) { btn.textContent='🏅 Generate My Certificate'; btn.disabled=false; }
+    }
+  } catch(e) {
+    showToast('Error generating certificate.', 'error');
+    if(btn) { btn.textContent='🏅 Generate My Certificate'; btn.disabled=false; }
+  }
+}
+</script>
+{% endblock %}

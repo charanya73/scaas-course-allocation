@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}Course Feedback – SCAAS{% endblock %}
+{% block content %}
+<div class="container page-wrap" style="max-width:700px;">
+  <div style="margin-bottom:2rem;">
+    <a href="/dashboard" style="color:var(--text2);text-decoration:none;font-size:0.85rem;font-weight:500;">← Back to Dashboard</a>
+    <h1 style="font-size:1.5rem;font-weight:800;margin-top:6px;">Course Feedback</h1>
+    <p style="color:var(--text2);font-size:0.875rem;">Your feedback helps improve course quality for future students</p>
+  </div>
+
+  {% if not allocation %}
+  <div class="card">
+    <div class="card-body" style="text-align:center;padding:3rem;">
+      <div style="font-size:3rem;margin-bottom:1rem;">📭</div>
+      <h2 style="font-weight:700;margin-bottom:0.5rem;">No Course Allocated</h2>
+      <p style="color:var(--text2);margin-bottom:1.5rem;">You need to be allocated a course before submitting feedback.</p>
+      <a href="/dashboard" class="btn btn-primary">Go to Dashboard</a>
+    </div>
+  </div>
+
+  {% elif existing %}
+  <div class="card" style="margin-bottom:1.5rem;">
+    <div style="background:linear-gradient(135deg,var(--success),#34d399);height:4px;"></div>
+    <div class="card-body" style="text-align:center;padding:2.5rem;">
+      <div style="font-size:3rem;margin-bottom:0.75rem;">✅</div>
+      <h2 style="font-weight:700;margin-bottom:0.5rem;">Feedback Submitted!</h2>
+      <p style="color:var(--text2);margin-bottom:1.5rem;">Thank you for rating <b>{{ allocation['course_name'] }}</b></p>
+      <div style="display:flex;justify-content:center;gap:4px;font-size:1.5rem;margin-bottom:1rem;">
+        {% for i in range(1,6) %}
+        <span style="color:{% if i <= existing['rating'] %}#f59e0b{% else %}#d1d5db{% endif %};">★</span>
+        {% endfor %}
+      </div>
+      <div style="background:var(--bg2);border-radius:var(--radius);padding:1.25rem;text-align:left;max-width:400px;margin:0 auto;">
+        {% for label, val in [('Teaching Quality', existing['teaching_quality']),('Content Quality', existing['content_quality']),('Difficulty Level', existing['difficulty_level'])] %}
+        <div style="display:flex;justify-content:space-between;padding:7px 0;{% if not loop.last %}border-bottom:1px solid var(--border);{% endif %}">
+          <span style="font-size:0.85rem;color:var(--text2);">{{ label }}</span>
+          <div style="display:flex;gap:2px;">{% for i in range(1,6) %}<span style="color:{% if i<=val %}#f59e0b{% else %}#d1d5db{% endif %};font-size:0.9rem;">★</span>{% endfor %}</div>
+        </div>
+        {% endfor %}
+        {% if existing['comments'] %}
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+          <div style="font-size:0.78rem;color:var(--text2);margin-bottom:4px;">Your Comment:</div>
+          <div style="font-size:0.875rem;font-style:italic;">"{{ existing['comments'] }}"</div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  {% else %}
+  <!-- Feedback Form -->
+  <div class="card" style="margin-bottom:1.5rem;">
+    <div style="background:linear-gradient(135deg,var(--primary),var(--primary-light));height:4px;"></div>
+    <div class="card-header">
+      <div>
+        <h3>Rate: {{ allocation['course_name'] }}</h3>
+        <p style="font-size:0.8rem;color:var(--text2);margin-top:2px;">{{ allocation['course_code'] }} · {{ allocation['department'] }}</p>
+      </div>
+    </div>
+    <div class="card-body">
+
+      <!-- Overall Rating -->
+      <div style="text-align:center;margin-bottom:2rem;padding:1.5rem;background:var(--bg2);border-radius:var(--radius);">
+        <p style="font-size:0.875rem;font-weight:600;color:var(--text2);margin-bottom:1rem;text-transform:uppercase;letter-spacing:0.04em;">Overall Course Rating</p>
+        <div style="display:flex;justify-content:center;gap:8px;font-size:2.5rem;" id="star-display">
+          {% for i in range(1,6) %}
+          <span class="star" data-val="{{ i }}" onclick="setRating({{ i }})" onmouseover="hoverRating({{ i }})" onmouseout="resetHover()"
+            style="cursor:pointer;color:#d1d5db;transition:all 0.1s;">★</span>
+          {% endfor %}
+        </div>
+        <div id="rating-label" style="font-size:0.85rem;color:var(--text2);margin-top:8px;height:20px;"></div>
+        <input type="hidden" id="rating" value="0">
+      </div>
+
+      <!-- Detailed Ratings -->
+      <div style="margin-bottom:1.5rem;">
+        <p style="font-size:0.875rem;font-weight:700;margin-bottom:1rem;">Detailed Ratings</p>
+        {% for field, label, id in [('teaching_quality','Teaching Quality','tq'),('content_quality','Content Quality','cq'),('difficulty_level','Difficulty Level','dl')] %}
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;{% if not loop.last %}border-bottom:1px solid var(--border);{% endif %}">
+          <span style="font-size:0.875rem;font-weight:500;">{{ label }}</span>
+          <div style="display:flex;gap:6px;" id="{{ id }}-stars">
+            {% for i in range(1,6) %}
+            <span class="detail-star" data-field="{{ id }}" data-val="{{ i }}"
+              onclick="setDetailRating('{{ id }}', {{ i }})"
+              onmouseover="hoverDetail('{{ id }}', {{ i }})" onmouseout="resetDetailHover('{{ id }}')"
+              style="cursor:pointer;font-size:1.4rem;color:#d1d5db;transition:all 0.1s;">★</span>
+            {% endfor %}
+          </div>
+          <input type="hidden" id="{{ id }}" value="3">
+        </div>
+        {% endfor %}
+      </div>
+
+      <!-- Would Recommend -->
+      <div style="margin-bottom:1.5rem;padding:1rem;background:var(--bg2);border-radius:var(--radius-sm);">
+        <p style="font-size:0.875rem;font-weight:600;margin-bottom:0.75rem;">Would you recommend this course to others?</p>
+        <div style="display:flex;gap:10px;">
+          <button id="yes-btn" onclick="setRecommend(1)" class="btn btn-success" style="flex:1;justify-content:center;">👍 Yes, Recommend</button>
+          <button id="no-btn" onclick="setRecommend(0)" class="btn btn-secondary" style="flex:1;justify-content:center;">👎 No</button>
+        </div>
+        <input type="hidden" id="would_recommend" value="1">
+      </div>
+
+      <!-- Comments -->
+      <div class="form-group">
+        <label class="form-label">Additional Comments <span style="font-weight:400;color:var(--text3);">(Optional)</span></label>
+        <textarea id="comments" class="form-textarea" rows="4" placeholder="Share your experience — what did you like? What could be improved?"
+          style="resize:vertical;"></textarea>
+      </div>
+
+      <button class="btn btn-primary btn-lg" style="width:100%;justify-content:center;" onclick="submitFeedback()" id="submit-btn">
+        Submit Feedback
+      </button>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+const ratingLabels = {1:'Poor',2:'Fair',3:'Good',4:'Very Good',5:'Excellent'};
+const detailRatings = {tq:3, cq:3, dl:3};
+
+// Initialize detail stars to 3
+window.addEventListener('DOMContentLoaded', ()=>{
+  ['tq','cq','dl'].forEach(field => setDetailRating(field, 3));
+  setRecommend(1);
+});
+
+function setRating(val) {
+  document.getElementById('rating').value = val;
+  document.querySelectorAll('.star').forEach(s => {
+    s.style.color = parseInt(s.dataset.val) <= val ? '#f59e0b' : '#d1d5db';
+    s.style.transform = parseInt(s.dataset.val) <= val ? 'scale(1.1)' : 'scale(1)';
+  });
+  document.getElementById('rating-label').textContent = ratingLabels[val] || '';
+  document.getElementById('rating-label').style.color = 'var(--warning)';
+}
+function hoverRating(val) {
+  document.querySelectorAll('.star').forEach(s => {
+    s.style.color = parseInt(s.dataset.val) <= val ? '#f59e0b' : '#d1d5db';
+  });
+  document.getElementById('rating-label').textContent = ratingLabels[val];
+}
+function resetHover() {
+  const cur = parseInt(document.getElementById('rating').value);
+  if(cur > 0) setRating(cur);
+  else {
+    document.querySelectorAll('.star').forEach(s => s.style.color='#d1d5db');
+    document.getElementById('rating-label').textContent = '';
+  }
+}
+
+function setDetailRating(field, val) {
+  detailRatings[field] = val;
+  document.getElementById(field).value = val;
+  document.querySelectorAll(`[data-field="${field}"]`).forEach(s => {
+    s.style.color = parseInt(s.dataset.val) <= val ? '#f59e0b' : '#d1d5db';
+  });
+}
+function hoverDetail(field, val) {
+  document.querySelectorAll(`[data-field="${field}"]`).forEach(s => {
+    s.style.color = parseInt(s.dataset.val) <= val ? '#f59e0b' : '#d1d5db';
+  });
+}
+function resetDetailHover(field) { setDetailRating(field, detailRatings[field]); }
+
+function setRecommend(val) {
+  document.getElementById('would_recommend').value = val;
+  document.getElementById('yes-btn').className = val===1 ? 'btn btn-success' : 'btn btn-secondary';
+  document.getElementById('no-btn').className = val===0 ? 'btn btn-danger' : 'btn btn-secondary';
+  document.getElementById('yes-btn').style.flex = '1';
+  document.getElementById('no-btn').style.flex = '1';
+  document.getElementById('yes-btn').style.justifyContent = 'center';
+  document.getElementById('no-btn').style.justifyContent = 'center';
+}
+
+async function submitFeedback() {
+  const rating = parseInt(document.getElementById('rating').value);
+  if(rating === 0) { showToast('Please select an overall rating (1-5 stars).', 'error'); return; }
+  const btn = document.getElementById('submit-btn');
+  btn.textContent = 'Submitting...'; btn.disabled = true;
+  try {
+    const r = await fetch('/feedback', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        rating, teaching_quality: detailRatings.tq,
+        content_quality: detailRatings.cq, difficulty_level: detailRatings.dl,
+        would_recommend: parseInt(document.getElementById('would_recommend').value),
+        comments: document.getElementById('comments').value
+      })
+    });
+    const d = await r.json();
+    if(d.success) { showToast(d.message, 'success'); setTimeout(()=>location.reload(), 1800); }
+    else { showToast(d.message, 'error'); btn.textContent='Submit Feedback'; btn.disabled=false; }
+  } catch(e) { showToast('Network error.', 'error'); btn.textContent='Submit Feedback'; btn.disabled=false; }
+}
+</script>
+{% endblock %}

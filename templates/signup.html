@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+{% block title %}Student Registration – SCAAS{% endblock %}
+{% block content %}
+<div style="min-height:calc(100vh - 60px);background:var(--bg2);display:flex;align-items:center;justify-content:center;padding:2rem;">
+  <div style="width:100%;max-width:580px;">
+    <div style="text-align:center;margin-bottom:1.5rem;">
+      <div style="width:52px;height:52px;background:var(--primary);border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 0.75rem;font-size:1.4rem;">🎓</div>
+      <h1 style="font-size:1.5rem;font-weight:800;">Student Registration</h1>
+      <p style="color:var(--text2);font-size:0.875rem;margin-top:4px;">Create your account to access the course allocation portal</p>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+          <div class="form-group" style="grid-column:span 2;">
+            <label class="form-label">Full Name *</label>
+            <input type="text" id="name" class="form-input" placeholder="Enter your full name">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Student ID *</label>
+            <input type="text" id="student_id" class="form-input" placeholder="e.g. 21CS001">
+            <div class="form-hint">Your official university student ID</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Department *</label>
+            <select id="department" class="form-select">
+              <option value="">— Select Department —</option>
+              <option>Computer Science</option>
+              <option>Electronics</option>
+              <option>Mechanical</option>
+              <option>Civil</option>
+              <option>Mathematics</option>
+              <option>Physics</option>
+              <option>Chemistry</option>
+              <option>Electrical</option>
+            </select>
+          </div>
+          <div class="form-group" style="grid-column:span 2;">
+            <label class="form-label">University Email *</label>
+            <input type="email" id="email" class="form-input" placeholder="yourname@university.edu">
+          </div>
+          <div class="form-group">
+            <label class="form-label">CGPA *</label>
+            <input type="number" id="cgpa" class="form-input" placeholder="e.g. 8.5" min="0" max="10" step="0.01">
+            <div class="form-hint">Scale of 0–10. Used for allocation priority.</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Completed Course Codes</label>
+            <input type="text" id="completed_courses" class="form-input" placeholder="e.g. CS201, EC201">
+            <div class="form-hint">Comma-separated prerequisite codes you've passed</div>
+          </div>
+          <div class="form-group" style="grid-column:span 2;">
+            <label class="form-label">Password *</label>
+            <input type="password" id="password" class="form-input" placeholder="Create a strong password" oninput="liveCheck()">
+            <div class="pw-requirements" id="pw-reqs">
+              <div class="pw-req" data-req="length">At least 8 characters</div>
+              <div class="pw-req" data-req="upper">One uppercase letter (A–Z)</div>
+              <div class="pw-req" data-req="lower">One lowercase letter (a–z)</div>
+              <div class="pw-req" data-req="number">One number (0–9)</div>
+              <div class="pw-req" data-req="special">One special character (!@#$...)</div>
+            </div>
+          </div>
+          <div class="form-group" style="grid-column:span 2;">
+            <label class="form-label">Confirm Password *</label>
+            <input type="password" id="confirm_password" class="form-input" placeholder="Re-enter your password">
+          </div>
+        </div>
+        <button class="btn btn-primary btn-lg" style="width:100%;justify-content:center;margin-top:0.5rem;" onclick="handleSignup()" id="signup-btn">
+          Create Account
+        </button>
+        <div class="divider"></div>
+        <p style="text-align:center;font-size:0.875rem;color:var(--text2);">
+          Already have an account? <a href="/login" style="color:var(--primary);font-weight:600;text-decoration:none;">Login here</a>
+        </p>
+      </div>
+    </div>
+    <p style="text-align:center;font-size:0.78rem;color:var(--text3);margin-top:1rem;">
+      Admin? <a href="/admin/signup" style="color:var(--text2);text-decoration:none;">Register as Admin</a>
+    </p>
+  </div>
+</div>
+<script>
+function liveCheck() {
+  checkPasswordStrength(document.getElementById('password').value, document.getElementById('pw-reqs'));
+}
+async function handleSignup() {
+  const btn = document.getElementById('signup-btn');
+  const data = {
+    name: document.getElementById('name').value.trim(),
+    student_id: document.getElementById('student_id').value.trim(),
+    email: document.getElementById('email').value.trim(),
+    password: document.getElementById('password').value,
+    confirm_password: document.getElementById('confirm_password').value,
+    department: document.getElementById('department').value,
+    cgpa: document.getElementById('cgpa').value,
+    completed_courses: document.getElementById('completed_courses').value
+  };
+  if(!data.name||!data.student_id||!data.email||!data.password||!data.department||!data.cgpa) {
+    showToast('Please fill in all required fields.','error'); return;
+  }
+  btn.textContent='Creating account...'; btn.disabled=true;
+  try {
+    const r = await fetch('/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    const d = await r.json();
+    if(d.success) {
+      showToast(d.message,'success');
+      setTimeout(()=>window.location.href='/login',1800);
+    } else {
+      showToast(d.message,'error');
+      btn.textContent='Create Account'; btn.disabled=false;
+    }
+  } catch(e) { showToast('Network error. Please try again.','error'); btn.textContent='Create Account'; btn.disabled=false; }
+}
+</script>
+{% endblock %}

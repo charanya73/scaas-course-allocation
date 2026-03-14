@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}SCAAS – Student Course Allocation System{% endblock %}
+{% block content %}
+<!-- HERO -->
+<section style="background:linear-gradient(135deg,#1e3a8a 0%,#1e40af 50%,#0891b2 100%);padding:4rem 0 3rem;color:#fff;">
+  <div class="container" style="text-align:center;">
+    <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);border-radius:999px;padding:5px 16px;margin-bottom:1.5rem;font-size:0.8rem;">
+      🎓 Academic Course Enrollment Portal
+    </div>
+    <h1 style="font-size:clamp(1.75rem,4vw,3rem);font-weight:800;line-height:1.2;margin-bottom:1rem;max-width:700px;margin-left:auto;margin-right:auto;">
+      Student Course Allocation<br>Automation System
+    </h1>
+    <p style="font-size:1rem;opacity:0.85;max-width:520px;margin:0 auto 2rem;">
+      Transparent, fair and automated course allocation based on your preferences, prerequisites and academic standing.
+    </p>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+      <a href="/signup" class="btn btn-lg" style="background:#fff;color:var(--primary-dark);font-weight:700;">Register as Student</a>
+      <a href="/login" class="btn btn-lg btn-outline" style="border-color:rgba(255,255,255,0.6);color:#fff;">Student Login</a>
+    </div>
+  </div>
+</section>
+
+<!-- STATS BAR -->
+<section style="background:var(--surface);border-bottom:1px solid var(--border);padding:1.25rem 0;">
+  <div class="container">
+    <div style="display:flex;gap:2rem;justify-content:center;flex-wrap:wrap;">
+      {% for label, value in [('Courses Available', courses|length), ('Departments', courses|map(attribute='department')|unique|list|length), ('Fair Allocation', 'CGPA-Based'), ('Conflict Check', 'Automated')] %}
+      <div style="text-align:center;">
+        <div style="font-size:1.25rem;font-weight:700;color:var(--primary);">{{ value }}</div>
+        <div style="font-size:0.75rem;color:var(--text2);font-weight:500;">{{ label }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section style="padding:3rem 0;">
+  <div class="container">
+    <h2 style="text-align:center;font-size:1.375rem;font-weight:700;margin-bottom:0.5rem;">How the System Works</h2>
+    <p style="text-align:center;color:var(--text2);margin-bottom:2rem;font-size:0.875rem;">Simple 4-step process for fair course allocation</p>
+    <div class="grid grid-4">
+      {% for step in [('1','Register','Create your student account with your ID, department and academic details.','🎓'),('2','Browse Courses','View available courses, check prerequisites and seat availability.','📚'),('3','Submit Preferences','Rank up to 5 courses in order of your preference.','📋'),('4','Get Allocated','System allocates based on CGPA priority and your preferences.','✅')] %}
+      <div style="text-align:center;padding:1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);">
+        <div style="width:44px;height:44px;background:var(--primary);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 0.75rem;color:#fff;font-weight:800;">{{ step[0] }}</div>
+        <div style="font-size:1.5rem;margin-bottom:0.5rem;">{{ step[3] }}</div>
+        <h3 style="font-size:0.9rem;font-weight:700;margin-bottom:5px;">{{ step[1] }}</h3>
+        <p style="font-size:0.8rem;color:var(--text2);">{{ step[2] }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<!-- COURSES -->
+<section id="courses" style="padding:1rem 0 3rem;">
+  <div class="container">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem;">
+      <div>
+        <h2 style="font-size:1.25rem;font-weight:700;">Available Courses</h2>
+        <p style="color:var(--text2);font-size:0.8rem;margin-top:2px;">{{ courses|length }} courses available for enrollment</p>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="dept-filters">
+        <button class="btn btn-sm btn-primary" onclick="filterCourses('all')">All</button>
+        {% for dept in courses|map(attribute='department')|unique|sort %}
+        <button class="btn btn-sm btn-secondary" onclick="filterCourses('{{ dept }}')">{{ dept }}</button>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="grid grid-3" id="course-grid">
+      {% for course in courses %}
+      <div class="card course-card" data-dept="{{ course['department'] }}" style="overflow:hidden;">
+        <div style="background:linear-gradient(135deg,var(--primary),var(--primary-light));height:4px;"></div>
+        <div class="card-body">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.75rem;">
+            <div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;color:var(--primary);font-weight:500;margin-bottom:3px;">{{ course['course_code'] }}</div>
+              <h3 style="font-size:0.95rem;font-weight:700;line-height:1.3;color:var(--text);">{{ course['course_name'] }}</h3>
+            </div>
+            <span class="badge badge-blue" style="flex-shrink:0;margin-left:8px;">{{ course['department'][:3].upper() }}</span>
+          </div>
+          <p style="font-size:0.8rem;color:var(--text2);margin-bottom:1rem;min-height:36px;">{{ course['description'] }}</p>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:0.75rem;">
+            <div style="background:var(--bg2);border-radius:var(--radius-sm);padding:7px 10px;">
+              <div style="font-size:0.68rem;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Seats</div>
+              <div style="font-size:0.9rem;font-weight:700;color:{% if course['seats_remaining'] < 10 %}var(--danger){% elif course['seats_remaining'] < 20 %}var(--warning){% else %}var(--success){% endif %};">{{ course['seats_remaining'] }}/{{ course['seat_capacity'] }}</div>
+            </div>
+            <div style="background:var(--bg2);border-radius:var(--radius-sm);padding:7px 10px;">
+              <div style="font-size:0.68rem;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Schedule</div>
+              <div style="font-size:0.78rem;font-weight:600;">{{ course['day'][:3] }} · {{ course['time_slot'] }}</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span style="font-size:0.75rem;color:var(--text3);font-weight:500;">Pre-req:</span>
+            <span class="badge {% if course['prerequisite'] == 'None' %}badge-green{% else %}badge-amber{% endif %}" style="font-size:0.72rem;">{{ course['prerequisite'] }}</span>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% if not courses %}
+    <div class="empty-state"><div class="empty-icon">📚</div><h3>No courses available yet</h3><p>Check back after admin adds courses.</p></div>
+    {% endif %}
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer style="background:var(--text);color:rgba(255,255,255,0.6);text-align:center;padding:1.5rem;font-size:0.8rem;">
+  <div>Student Course Allocation Automation System &nbsp;|&nbsp; <a href="/admin/login" style="color:rgba(255,255,255,0.4);text-decoration:none;">Admin Login</a></div>
+</footer>
+<script>
+function filterCourses(dept) {
+  document.querySelectorAll('.course-card').forEach(c => {
+    c.style.display = (dept==='all' || c.dataset.dept===dept) ? 'block':'none';
+  });
+  document.querySelectorAll('#dept-filters .btn').forEach(b=>b.className='btn btn-sm btn-secondary');
+  event.target.className='btn btn-sm btn-primary';
+}
+</script>
+{% endblock %}

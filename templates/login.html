@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Student Login – SCAAS{% endblock %}
+{% block content %}
+<div style="min-height:calc(100vh - 60px);background:var(--bg2);display:flex;align-items:center;justify-content:center;padding:2rem;">
+  <div style="width:100%;max-width:420px;">
+    <div style="text-align:center;margin-bottom:1.5rem;">
+      <div style="width:52px;height:52px;background:var(--primary);border-radius:12px;display:flex;align-items:center;justify-content:center;margin:0 auto 0.75rem;font-size:1.4rem;">🔐</div>
+      <h1 style="font-size:1.5rem;font-weight:800;">Student Login</h1>
+      <p style="color:var(--text2);font-size:0.875rem;margin-top:4px;">Access your course allocation portal</p>
+    </div>
+    <div class="card">
+      <div class="card-body">
+        <div class="form-group">
+          <label class="form-label">Email Address</label>
+          <input type="email" id="email" class="form-input" placeholder="your@university.edu">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" id="password" class="form-input" placeholder="Your password" onkeydown="if(event.key==='Enter')handleLogin()">
+        </div>
+        <button class="btn btn-primary btn-lg" style="width:100%;justify-content:center;margin-top:0.25rem;" onclick="handleLogin()" id="login-btn">Login</button>
+        <div class="divider"></div>
+        <p style="text-align:center;font-size:0.875rem;color:var(--text2);">
+          New student? <a href="/signup" style="color:var(--primary);font-weight:600;text-decoration:none;">Create account</a>
+        </p>
+      </div>
+    </div>
+    <p style="text-align:center;font-size:0.78rem;color:var(--text3);margin-top:1rem;">
+      <a href="/admin/login" style="color:var(--text2);text-decoration:none;">Admin Login →</a>
+    </p>
+  </div>
+</div>
+<script>
+async function handleLogin() {
+  const btn = document.getElementById('login-btn');
+  btn.textContent='Logging in...'; btn.disabled=true;
+  try {
+    const r = await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('email').value,password:document.getElementById('password').value})});
+    const d = await r.json();
+    if(d.success){showToast('Login successful!','success');setTimeout(()=>window.location.href=d.redirect,600);}
+    else{showToast(d.message,'error');btn.textContent='Login';btn.disabled=false;}
+  } catch(e){showToast('Network error.','error');btn.textContent='Login';btn.disabled=false;}
+}
+</script>
+{% endblock %}
