@@ -65,6 +65,7 @@ def init_db():
         seat_capacity INTEGER NOT NULL, seats_remaining INTEGER NOT NULL,
         prerequisite TEXT DEFAULT 'None', day TEXT DEFAULT 'Monday',
         time_slot TEXT DEFAULT '09:00-10:30', venue TEXT DEFAULT 'TBD',
+        start_date TEXT DEFAULT '', end_date TEXT DEFAULT '',
         description TEXT DEFAULT '', is_active INTEGER DEFAULT 1,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     c.execute('''CREATE TABLE IF NOT EXISTS allocation_settings (
@@ -112,8 +113,37 @@ def init_db():
         sender_name TEXT DEFAULT 'SCAAS Course Allocation',
         enabled INTEGER DEFAULT 0,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        email TEXT NOT NULL, token TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT 'student',
+        expires_at TIMESTAMP NOT NULL,
+        used INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     c.execute('INSERT OR IGNORE INTO email_config (id, sender_email, sender_password, enabled) VALUES (1, \'\', \'\', 0)')
     c.execute('INSERT OR IGNORE INTO allocation_settings (id, preference_deadline, max_preferences, allow_modifications, allocation_run) VALUES (1, NULL, 5, 1, 0)')
+    conn.commit()
+    conn.close()
+
+def migrate_db():
+    """Runs on every startup — adds missing columns and fixes bad data."""
+    conn = get_db()
+    # Add start_date / end_date columns if upgrading from old DB
+    try:
+        conn.execute("ALTER TABLE courses ADD COLUMN start_date TEXT DEFAULT ''")
+    except: pass
+    try:
+        conn.execute("ALTER TABLE courses ADD COLUMN end_date TEXT DEFAULT ''")
+    except: pass
+    # Fix all bad prerequisite values in one CASE statement
+    conn.execute("""
+        UPDATE courses SET prerequisite = CASE
+            WHEN prerequisite IS NULL               THEN 'None'
+            WHEN TRIM(prerequisite) = ''            THEN 'None'
+            WHEN UPPER(TRIM(prerequisite)) = 'NONE' THEN 'None'
+            ELSE UPPER(TRIM(prerequisite))
+        END
+    """)
     conn.commit()
     conn.close()
 
@@ -507,12 +537,13 @@ def preferences():
                 conn.close()
                 return jsonify({'success':False,'message':f'Schedule conflict: {cr["course_name"]} overlaps with {time_map[key]}.'})
             time_map[key] = cr['course_name']
-        completed = [x.strip() for x in student['completed_courses'].split(',') if x.strip()]
+        completed = [x.strip().upper() for x in (student['completed_courses'] or '').split(',') if x.strip()]
         for item in selected:
             cr = conn.execute('SELECT * FROM courses WHERE course_id=?', (item['course_id'],)).fetchone()
-            if cr['prerequisite'] != 'None' and cr['prerequisite'].strip() not in completed:
+            prereq = (cr['prerequisite'] or '').strip().upper()
+            if prereq and prereq != 'NONE' and prereq not in completed:
                 conn.close()
-                return jsonify({'success':False,'message':f'Prerequisite not completed: "{cr["prerequisite"]}" required for {cr["course_name"]}.'})
+                return jsonify({'success':False,'message':f'Prerequisite not completed: "{cr["prerequisite"]}" is required for {cr["course_name"]}.'})
         conn.execute('DELETE FROM preferences WHERE student_id=?', (session['student_id'],))
         for item in selected:
             conn.execute('INSERT INTO preferences (student_id,course_id,priority_rank) VALUES (?,?,?)',
@@ -631,6 +662,72 @@ def download_certificate(cert_id):
             mimetype='application/pdf')
     return "Install reportlab first: pip install reportlab", 500
 
+@app.route('/forgot-password', methods=['GET','POST'])
+def forgot_password():
+    if request.method == 'POST':
+        data = request.get_json()
+        email = data.get('email','').strip().lower()
+        role  = data.get('role','student')
+        conn  = get_db()
+        if role == 'admin':
+            user = conn.execute('SELECT * FROM admins WHERE email=?', (email,)).fetchone()
+        else:
+            user = conn.execute('SELECT * FROM students WHERE email=?', (email,)).fetchone()
+        if not user:
+            conn.close()
+            return jsonify({'success':False,'message':'No account found with this email.'})
+        import secrets
+        token = secrets.token_urlsafe(32)
+        expires = datetime.now().replace(microsecond=0)
+        from datetime import timedelta
+        expires = expires + timedelta(hours=1)
+        conn.execute('DELETE FROM password_reset_tokens WHERE email=? AND role=?', (email, role))
+        conn.execute('INSERT INTO password_reset_tokens (email,token,role,expires_at) VALUES (?,?,?,?)',
+                     (email, token, role, expires))
+        conn.commit()
+        reset_link = url_for('reset_password', token=token, _external=True)
+        content = f'''<p style="color:#374151;">Dear <b>{user["name"]}</b>,</p>
+          <p style="color:#374151;">We received a request to reset your SCAAS password.</p>
+          <div style="text-align:center;margin:28px 0;">
+            <a href="{reset_link}" style="background:#1e40af;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">Reset My Password →</a>
+          </div>
+          <p style="color:#6b7280;font-size:13px;">This link expires in <b>1 hour</b>. If you did not request this, ignore this email.</p>'''
+        html = build_email_base('#1e40af','🔑','Password Reset Request','SCAAS', content)
+        send_email(email, user['name'], '🔑 Reset Your SCAAS Password', html, 'password_reset')
+        conn.close()
+        return jsonify({'success':True,'message':f'Password reset link sent to {email}. Check your inbox.'})
+    return render_template('forgot_password.html')
+
+@app.route('/reset-password/<token>', methods=['GET','POST'])
+def reset_password(token):
+    conn = get_db()
+    record = conn.execute(
+        'SELECT * FROM password_reset_tokens WHERE token=? AND used=0', (token,)).fetchone()
+    if not record or datetime.strptime(str(record['expires_at']), '%Y-%m-%d %H:%M:%S') < datetime.now():
+        conn.close()
+        return render_template('reset_password.html', error='This reset link has expired or is invalid.', token=token)
+    if request.method == 'POST':
+        data = request.get_json()
+        password = data.get('password','')
+        confirm  = data.get('confirm_password','')
+        if password != confirm:
+            conn.close()
+            return jsonify({'success':False,'message':'Passwords do not match.'})
+        valid, msg = validate_password(password)
+        if not valid:
+            conn.close()
+            return jsonify({'success':False,'message':msg})
+        hashed = hash_password(password)
+        if record['role'] == 'admin':
+            conn.execute('UPDATE admins SET password=? WHERE email=?', (hashed, record['email']))
+        else:
+            conn.execute('UPDATE students SET password=? WHERE email=?', (hashed, record['email']))
+        conn.execute('UPDATE password_reset_tokens SET used=1 WHERE token=?', (token,))
+        conn.commit(); conn.close()
+        return jsonify({'success':True,'message':'Password reset successful! You can now login.'})
+    conn.close()
+    return render_template('reset_password.html', token=token, error=None)
+
 # ─── ADMIN ROUTES ─────────────────────────────────────────────────────────────────
 @app.route('/admin')
 def admin_dashboard():
@@ -659,39 +756,132 @@ def admin_dashboard():
         students=students, courses=courses, allocations=allocations,
         settings=settings, email_logs=email_logs, feedback_summary=feedback_summary)
 
+def times_overlap(slot1, slot2):
+    """Returns True if two time slots overlap.
+    Supports HH:MM and HH:MM:SS formats e.g. '09:00-10:30' or '09:00:30-10:30:45'"""
+    try:
+        def to_secs(t):
+            parts = t.strip().split(':')
+            h = int(parts[0]) if len(parts) > 0 else 0
+            m = int(parts[1]) if len(parts) > 1 else 0
+            s = int(parts[2]) if len(parts) > 2 else 0
+            return h*3600 + m*60 + s
+        # slot format: "HH:MM-HH:MM" or "HH:MM:SS-HH:MM:SS"
+        # Find the dash that separates start from end (after first colon group)
+        def split_slot(slot):
+            slot = slot.strip()
+            # Find '-' that is not inside a time (i.e., after position 4)
+            idx = slot.find('-', 4)
+            if idx == -1:
+                return None, None
+            return slot[:idx], slot[idx+1:]
+        s1_str, e1_str = split_slot(slot1)
+        s2_str, e2_str = split_slot(slot2)
+        if not s1_str or not s2_str:
+            return slot1.strip() == slot2.strip()
+        s1, e1 = to_secs(s1_str), to_secs(e1_str)
+        s2, e2 = to_secs(s2_str), to_secs(e2_str)
+        return s1 < e2 and s2 < e1
+    except:
+        return slot1.strip() == slot2.strip()
+
+def get_venue_conflict(venue, day, time_slot, exclude_course_id=None):
+    """Check if any active course has the same venue+day with an overlapping time slot."""
+    conn = get_db()
+    if exclude_course_id:
+        rows = conn.execute(
+            'SELECT course_id, course_name, time_slot FROM courses WHERE is_active=1 AND LOWER(TRIM(venue))=LOWER(TRIM(?)) AND day=? AND course_id!=?',
+            (venue, day, int(exclude_course_id))).fetchall()
+    else:
+        rows = conn.execute(
+            'SELECT course_id, course_name, time_slot FROM courses WHERE is_active=1 AND LOWER(TRIM(venue))=LOWER(TRIM(?)) AND day=?',
+            (venue, day)).fetchall()
+    conn.close()
+    for row in rows:
+        if times_overlap(time_slot, row['time_slot']):
+            return row['course_name']
+    return None
+
+@app.route('/admin/check-venue-conflict', methods=['POST'])
+def check_venue_conflict():
+    if session.get('role') != 'admin':
+        return jsonify({'conflict': False})
+    data      = request.get_json()
+    venue     = (data.get('venue') or '').strip()
+    day       = (data.get('day') or '').strip()
+    time_slot = (data.get('time_slot') or '').strip()
+    course_id = data.get('course_id', '')
+    if not venue or not day or not time_slot:
+        return jsonify({'conflict': False})
+    # Warn if TBD — not a real venue
+    if venue.upper() == 'TBD':
+        return jsonify({'conflict': True, 'course_name': None, 'tbd': True})
+    conflict_name = get_venue_conflict(venue, day, time_slot, course_id if course_id else None)
+    if conflict_name:
+        return jsonify({'conflict': True, 'course_name': conflict_name, 'tbd': False})
+    return jsonify({'conflict': False})
+
 @app.route('/admin/course/add', methods=['POST'])
 def add_course():
     if session.get('role') != 'admin': return jsonify({'success':False,'message':'Unauthorized'})
     data = request.get_json()
     if not all([data.get('course_name'), data.get('course_code'), data.get('department'), data.get('seat_capacity')]):
         return jsonify({'success':False,'message':'All fields required.'})
+    venue     = (data.get('venue') or '').strip()
+    day       = data.get('day','Monday')
+    time_slot = data.get('time_slot','')
+    # Force admin to enter a real venue
+    if not venue or venue.upper() == 'TBD':
+        return jsonify({'success':False,'message':'⚠️ Please enter a real Venue / Room Number. "TBD" is not allowed — a specific room must be assigned to every course.'})
+    if not time_slot:
+        return jsonify({'success':False,'message':'Please set a valid start time and duration.'})
+    # Block if venue+day+time overlaps with any existing course
+    conflict_name = get_venue_conflict(venue, day, time_slot)
+    if conflict_name:
+        return jsonify({'success':False,'message':f'⚠️ Venue Conflict: "{venue}" is already booked on {day} at {time_slot} for "{conflict_name}". Please choose a different venue, day, or time.'})
+    prereq = (data.get('prerequisite') or '').strip()
+    prereq = 'None' if (not prereq or prereq.upper() == 'NONE') else prereq.upper()
     try:
         conn = get_db()
         conn.execute('''INSERT INTO courses (course_name,course_code,department,seat_capacity,seats_remaining,
-            prerequisite,day,time_slot,venue,description) VALUES (?,?,?,?,?,?,?,?,?,?)''',
+            prerequisite,day,time_slot,venue,start_date,end_date,description) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''',
             (data['course_name'].strip(), data['course_code'].strip().upper(), data['department'],
-             int(data['seat_capacity']), int(data['seat_capacity']),
-             data.get('prerequisite','None').strip() or 'None',
-             data.get('day','Monday'), data.get('time_slot','09:00-10:30'),
-             data.get('venue','TBD').strip() or 'TBD', data.get('description','').strip()))
+             int(data['seat_capacity']), int(data['seat_capacity']), prereq, day, time_slot,
+             venue, data.get('start_date','').strip(), data.get('end_date','').strip(),
+             data.get('description','').strip()))
         conn.commit(); conn.close()
-        return jsonify({'success':True,'message':f'Course {data["course_code"].upper()} added!'})
+        return jsonify({'success':True,'message':f'Course {data["course_code"].upper()} added successfully!'})
     except sqlite3.IntegrityError:
         return jsonify({'success':False,'message':'Course code already exists.'})
 
 @app.route('/admin/course/update', methods=['POST'])
 def update_course():
     if session.get('role') != 'admin': return jsonify({'success':False,'message':'Unauthorized'})
-    data = request.get_json()
+    data      = request.get_json()
+    venue     = (data.get('venue') or '').strip()
+    day       = data.get('day','Monday')
+    time_slot = data.get('time_slot','')
+    course_id = int(data['course_id'])
+    # Force admin to enter a real venue
+    if not venue or venue.upper() == 'TBD':
+        return jsonify({'success':False,'message':'⚠️ Please enter a real Venue / Room Number. "TBD" is not allowed — a specific room must be assigned to every course.'})
+    if not time_slot:
+        return jsonify({'success':False,'message':'Please set a valid start time and duration.'})
+    # Block if venue+day+time overlaps with any other course
+    conflict_name = get_venue_conflict(venue, day, time_slot, course_id)
+    if conflict_name:
+        return jsonify({'success':False,'message':f'⚠️ Venue Conflict: "{venue}" is already booked on {day} at {time_slot} for "{conflict_name}". Please choose a different venue, day, or time.'})
+    prereq = (data.get('prerequisite') or '').strip()
+    prereq = 'None' if (not prereq or prereq.upper() == 'NONE') else prereq.upper()
     conn = get_db()
     conn.execute('''UPDATE courses SET course_name=?,department=?,seat_capacity=?,seats_remaining=?,
-        prerequisite=?,day=?,time_slot=?,venue=?,description=?,is_active=? WHERE course_id=?''',
+        prerequisite=?,day=?,time_slot=?,venue=?,start_date=?,end_date=?,description=?,is_active=? WHERE course_id=?''',
         (data['course_name'], data['department'], int(data['seat_capacity']),
-         int(data['seats_remaining']), data['prerequisite'], data['day'],
-         data['time_slot'], data.get('venue','TBD'), data['description'],
-         int(data.get('is_active',1)), data['course_id']))
+         int(data['seats_remaining']), prereq, day, time_slot, venue,
+         data.get('start_date','').strip(), data.get('end_date','').strip(),
+         data['description'], int(data.get('is_active',1)), course_id))
     conn.commit(); conn.close()
-    return jsonify({'success':True,'message':'Course updated!'})
+    return jsonify({'success':True,'message':'Course updated successfully!'})
 
 @app.route('/admin/course/delete', methods=['POST'])
 def delete_course():
@@ -789,11 +979,12 @@ def run_allocation():
         prefs = conn.execute('''SELECT p.priority_rank, c.* FROM preferences p
             JOIN courses c ON p.course_id=c.course_id
             WHERE p.student_id=? AND c.is_active=1 ORDER BY p.priority_rank''', (student['id'],)).fetchall()
-        completed = [x.strip() for x in student['completed_courses'].split(',') if x.strip()]
+        completed = [x.strip().upper() for x in (student['completed_courses'] or '').split(',') if x.strip()]
         allocated = False
         reason = 'No preferences submitted'
         for pref in prefs:
-            if pref['prerequisite'] != 'None' and pref['prerequisite'].strip() not in completed:
+            prereq = (pref['prerequisite'] or '').strip().upper()
+            if prereq and prereq != 'NONE' and prereq not in completed:
                 reason = f'Prerequisite not met for P{pref["priority_rank"]}'; continue
             seats = conn.execute('SELECT seats_remaining FROM courses WHERE course_id=?', (pref['course_id'],)).fetchone()
             if seats and seats['seats_remaining'] > 0:
@@ -900,6 +1091,7 @@ def api_course(course_id):
 
 if __name__ == '__main__':
     init_db()
+    migrate_db()
     load_email_config()   # Load saved email settings from DB on startup
     print("=" * 55)
     print("  SCAAS - Student Course Allocation System")
@@ -907,5 +1099,4 @@ if __name__ == '__main__':
     print(f"  Email: {'✅ ENABLED (' + EMAIL_CONFIG['sender_email'] + ')' if EMAIL_CONFIG['enabled'] else '❌ Not configured (go to Admin → Emails)'}")
     print(f"  URL:   http://localhost:5000")
     print("=" * 55)
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(debug=False, host='0.0.0.0', port=5000)
